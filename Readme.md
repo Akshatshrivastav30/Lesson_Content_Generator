@@ -1,40 +1,65 @@
-Markdown# 🎓 Self-Evaluating Lesson Content Generator
+# 🎓 Self-Evaluating Lesson Content Generator
 
-An agentic system built with **LangGraph**, **LangChain**, and **Groq (GPT-OSS-120B)** that automatically generates, evaluates, and regenerates introductory learning content tailored for non-English-medium, 12th-grade graduates in India.
+An agentic content-generation system built with **LangGraph**, **LangChain**, and **Groq (GPT-OSS-120B)** that automatically generates, evaluates, and iteratively refines introductory technical learning content.
 
-The core of this system is a strict **Generate → Evaluate → Regenerate** feedback loop that ensures lessons clear quality benchmarks—covering clarity, everyday Indian analogies, zero unexplained jargon, and sentence accessibility—before human delivery.
+Designed specifically for **12th-grade graduates in India from non-English-medium backgrounds**, this system runs an autonomous **Generate → Evaluate → Regenerate** loop to ensure lessons clear strict quality and accessibility benchmarks before reaching human learners.
 
 ---
 
-## 🏗️ System Architecture & Workflow
+## 📌 System Architecture & Workflow
+
+The architecture uses **LangGraph** stateful orchestration to manage execution flow, retry tracking, and remediation context propagation across nodes.
 
 ```text
-       [ User Prompt / Topic ]
-                  │
-                  ▼
-         ┌─────────────────┐
-         │  generator_node │ ◄──────────────────────┐
-         └────────┬────────┘                        │
-                  │ (Lesson Draft)                  │
-                  ▼                                 │
-         ┌─────────────────┐                        │
-         │  evaluator_node │                        │
-         └────────┬────────┘                        │
-                  │                                 │
-                  ▼                                 │
-     [ route_after_evaluation ]                     │
-     ┌────────────┴───────────┐                     │
-     │                        │                     │
-[ Pass: Approved ]  [ Fail: Retries < 3 ]───────────┤
-     │                        │ (Feedback History)  │
-     ▼                        ▼                     │
-   (END)           [ increment_retry_node ]─────────┘
-                              │
-                    [ Retries >= 3 Exceeded ]
-                              │
-                              ▼
-                            (END)
-Key Componentsgenerator_node: Drafts beginner-friendly content using ChatGroq. Integrates feedback history on retries to fix previous failure points.evaluator_node: Judges the draft against a strict 5-point binary rubric (Accuracy, Accessibility, Analogy, Jargon, Flow). Logs reason and actionable fixes on failure.route_after_evaluation: Conditional edge controlling state transitions. Loops back to generator if retries remain; otherwise terminates cleanly.📋 Evaluation RubricEvery lesson draft is evaluated on a strict PASS/FAIL basis across 5 dimensions:DimensionCriteriaAccuracy & GroundednessContent must be technically sound and accurate.AccessibilitySentences strictly concise (under 12–15 words per sentence).AnalogyTeaches using everyday Indian context (e.g., local vendors, notebooks).Jargon-FreeEvery technical term/acronym (e.g., RAG) MUST be defined inline immediately.Teaching FlowLogical progression through What it is, Why it matters, How it works, and Summary.🛠️ Prerequisites & Setup1. RequirementsPython: 3.10+Groq API Key: Obtainable from the Groq Console.2. Installation & Virtual EnvironmentBash# Clone the repository
+       ┌───────────────────────────────┐
+       │   User Input: Lesson Topic    │
+       └───────────────┬───────────────┘
+                       │
+                       ▼
+            ┌─────────────────────┐
+            │   generator_node    │ ◄──────────────────────────┐
+            └──────────┬──────────┘                            │
+                       │ (Lesson Draft)                        │
+                       ▼                                       │
+            ┌─────────────────────┐                            │
+            │   evaluator_node    │                            │
+            └──────────┬──────────┘                            │
+                       │                                       │
+                       ▼                                       │
+         [ route_after_evaluation ]                            │
+         ┌─────────────┴─────────────┐                         │
+         │                           │                         │
+  (Pass: Approved)          (Fail: Retries < 3)                 │
+         │                           │                         │
+         ▼                           ▼                         │
+   ┌───────────┐          [ feedback_history ]                 │
+   │   (END)   │                     │                         │
+   └───────────┘                     ▼                         │
+                          ┌─────────────────────┐              │
+                          │ increment_retry_node│ ─────────────┘
+                          └──────────┬──────────┘
+                                     │
+                           (Retries >= 3 Exceeded)
+                                     │
+                                     ▼
+                               ┌───────────┐
+                               │   (END)   │
+                               └───────────┘
+⚙️ Core Agent Nodes & State Flow1. Working Memory (AgentState)The agent's state persists across iterations within a single graph run:topic: The target subject (e.g., "Introduction to RAG").current_draft: Structured LessonDraft output generated by the LLM.evaluation_report: Flattened EvaluationReport Pydantic evaluation schema output.retry_count: Integer counter tracking attempt iterations (capped by MAX_RETRIES = 3).feedback_history: Accumulated list of evaluator failure reasons and actionable remediation instructions.rejection_logs: Structured audit trail array capturing failed drafts, failed checks, and feedback for every attempt.2. Node Mechanicsgenerator_node: Leverages ChatGroq (openai/gpt-oss-120b) with structured output enforcement (LessonDraft). On attempt 1, it follows persona constraints. On retries, it ingests the feedback_history context to dynamically correct failed areas.evaluator_node: Acts as a strict quality filter operating at temperature=0.0. Evaluates drafts against a binary 5-point pass/fail rubric using a flattened Pydantic schema to maintain schema integrity on Groq.increment_retry_node: Increments retry_count prior to routing back to the generator.route_after_evaluation: Conditional edge function that terminates execution if is_approved == True or if retry_count >= MAX_RETRIES.📋 Evaluation RubricEvery draft must achieve a 100% Pass rating across all 5 binary rubric checkpoints:DimensionBinary ThresholdVerification LogicAccuracy & GroundednessPass / FailContent must be technically accurate without hallucinations or misleading explanations.AccessibilityPass / FailSentences strictly concise (12–15 words max per sentence) to suit learners with limited English vocabulary.Everyday AnalogyPass / FailConcepts must be anchored in relatable, everyday Indian contexts (e.g., local shopkeepers, notebooks, newsstands).Jargon-FreePass / FailZero unexplained technical terms. Acronyms (e.g., RAG) must be instantly defined in plain language upon first appearance.Teaching FlowPass / FailCoherent structural progression: What it is → Why it matters → How it works → Summary.📂 Project StructurePlaintext.
+├── config/
+│   └── persona.py         # Target learner persona prompt & prompt instructions
+├── src/
+│   ├── graph/
+│   │   ├── nodes.py       # LangGraph node functions, LLM initialization, & conditional routing
+│   │   └── state.py       # TypedDict AgentState & RejectionEntry schema definitions
+│   └── schemas/
+│       ├── evaluation.py  # Flattened Pydantic EvaluationReport schema (Groq compatible)
+│       └── lesson.py      # Pydantic LessonDraft structured output schema
+├── .env                   # Environment variables (GROQ_API_KEY)
+├── main.py                # Entry point, LangGraph compilation, & CLI runner
+├── requirements.txt       # Project Python dependencies
+└── README.md              # System documentation
+🛠️ Prerequisites & Setup1. RequirementsPython: 3.10+Groq API Key: Obtainable from the Groq Console.2. InstallationBash# Clone the repository
 git clone [https://github.com/your-username/self-evaluating-lesson-generator.git](https://github.com/your-username/self-evaluating-lesson-generator.git)
 cd self-evaluating-lesson-generator
 
@@ -42,37 +67,32 @@ cd self-evaluating-lesson-generator
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies
+# Upgrade pip and install dependencies
+pip install --upgrade pip
 pip install -r requirements.txt
-3. Environment VariablesCreate a .env file in the root directory:Code snippetGROQ_API_KEY=your_groq_api_key_here
-🚀 Running the PipelineExecute the main agentic loop:Bashpython main.py
-Example Output StructureUpon execution, the terminal outputs status logs, draft iterations, and audit details:Approved Execution: Prints full approved lesson structured into beginner-friendly sections.Audit Trail: Outputs attempt logs with specific criteria failures and generated remediation feedback.📂 Project StructurePlaintext.
-├── config/
-│   └── persona.py         # Target learner persona prompt definition
-├── src/
-│   ├── graph/
-│   │   ├── nodes.py       # LangGraph nodes (Generator, Evaluator, Router)
-│   │   └── state.py       # TypedDict AgentState & RejectionEntry schemas
-│   └── schemas/
-│       ├── evaluation.py  # Structured Pydantic evaluation output schema
-│       └── lesson.py      # Lesson draft structure schema
-├── .env                   # Environment variables (GROQ_API_KEY)
-├── main.py                # Entry point & graph execution app
-├── requirements.txt       # Project dependencies
-└── README.md              # Project documentation
+3. Environment ConfigurationCreate a .env file in the root project directory:Code snippetGROQ_API_KEY=gsk_your_actual_groq_api_key_here
+🚀 Running the PipelineTo execute the self-evaluating generation graph:Bashpython main.py
+Example Terminal Output StructurePlaintext🚀 Starting Self-Evaluating Agent Pipeline for Topic: 'Introduction to RAG (Retrieval-Augmented Generation)'
 
----
+╭────────────────────────────────────────────────────── Status ───────────────────────────────────────────────────────╮
+│ ✅ LESSON APPROVED BY EVALUATOR                                                                                    │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
-### 📤 Git Push Commands
+╭────────────────────────────────────────────── Final Lesson Draft Output ──────────────────────────────────────────────╮
 
-Run these terminal commands to stage the new `README.md` and push it to your repository:
+ Title: What is RAG?
 
-```bash
-# 1. Stage README.md
-git add README.md
+ 1. What is it?
+ RAG stands for Retrieval-Augmented Generation (a tool that looks up facts before writing answers).
 
-# 2. Commit changes
-git commit -m "docs: add complete project README with Groq API setup and architecture details"
+ 2. Why it matters?
+ It stops AI from giving old answers, like a fresh newsstand vendor checking today's news.
 
-# 3. Push to remote repository
-git push origin upstream
+ 3. How it works?
+ First, it searches a digital notebook for facts. Then, it writes a clear answer using those facts.
+
+ Summary:
+ RAG finds facts first and then answers, giving you accurate and up-to-date help.
+
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+🛡️ Robustness & Safety ControlsGroq Schema Optimization: Flattened Pydantic validation schema prevents 400 Bad Request schema parsing errors when using open-weights models.Infinite Loop Prevention: Enforces a strict MAX_RETRIES = 3 ceiling on state transitions.Auditability: Unapproved drafts are captured alongside exact failed checks and remediation directives in the state's rejection_logs array.
